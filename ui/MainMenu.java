@@ -15,7 +15,6 @@ import dao.OrderDAO;
 
 public class MainMenu {
   public static void main(String[] args) {
-    // instâncias simples (DAO/Service)
     CustomerDAO customerDAO = new dao.impl.CustomerDAOImpl();
     ProductDAO productDAO = new dao.impl.ProductDAOImpl();
     OrderDAO orderDAO = new dao.impl.OrderDAOImpl();
@@ -53,7 +52,6 @@ public class MainMenu {
           }
           break;
         case 2:
-          // exemplo rápido de cadastro de produto
           System.out.print("Nome: ");
           String pname = sc.nextLine();
           System.out.print("Preço (ex: 9.99): ");
@@ -71,15 +69,11 @@ public class MainMenu {
           }
           break;
         case 3:
-          // criação de pedido simplificada (assume cliente existente e itens já montados)
           System.out.print("Id do Cliente: ");
           int cid = Integer.parseInt(sc.nextLine());
-          // Montagem simples de itens pode ser expandido...
           System.out.println("NOTA: Em uma versão completa, aqui você criaria itens e chamaria pedidoService.createOrder.");
           break;
         case 4:
-          // listar clientes (exemplo rápido)
-          // Implementar conforme método findAll/Iteração simples
           System.out.println("Listagem de clientes não implementada neste commit UI.");
           break;
         case 6:
@@ -90,7 +84,6 @@ public class MainMenu {
       }
     }
 
-    // encerra worker
     worker.stop();
     try {
       workerThread.join();

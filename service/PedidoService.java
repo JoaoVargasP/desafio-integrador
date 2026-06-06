@@ -22,7 +22,6 @@ public class PedidoService {
     this.orderDAO = orderDAO;
   }
 
-  // Criação de pedido com transação única: estoque + persistência
   public Order createOrder(int customerId, List<OrderItem> items) throws SQLException {
     Optional<Customer> cOpt = customerDAO.findById(customerId);
     if (!cOpt.isPresent()) {
@@ -30,7 +29,6 @@ public class PedidoService {
     }
     Customer customer = cOpt.get();
 
-    // Início da transação própria da camada de serviço
     String sqlInsertOrder = "INSERT INTO orders (customer_id, status, created_at) VALUES (?, ?, ?)";
     String sqlInsertItem = "INSERT INTO order_items (order_id, product_id, quantity, price_at_order) VALUES (?, ?, ?, ?)";
     String sqlStock = "UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?";
@@ -39,7 +37,6 @@ public class PedidoService {
       conn.setAutoCommit(false);
       int orderId;
 
-      // 1) inserir pedido
       try (PreparedStatement psOrder = conn.prepareStatement(sqlInsertOrder, Statement.RETURN_GENERATED_KEYS)) {
         psOrder.setInt(1, customer.getId());
         psOrder.setString(2, OrderStatus.FILA.name()); // salvo com FILA para processamento
@@ -51,14 +48,12 @@ public class PedidoService {
         }
       }
 
-      // 2) atualizar estoque (condicional) e 3) inserir itens
       try (PreparedStatement psStock = conn.prepareStatement(sqlStock);
            PreparedStatement psItem = conn.prepareStatement(sqlInsertItem)) {
         for (OrderItem item : items) {
           int productId = item.getProduct().getId();
           int qty = item.getQuantity();
 
-          // estoque reservado
           psStock.setInt(1, qty);
           psStock.setInt(2, productId);
           psStock.setInt(3, qty);
@@ -80,7 +75,6 @@ public class PedidoService {
 
       conn.commit();
 
-      // Montar objeto de retorno (id gerado, status FILA)
       Order persisted = new Order(orderId, customer, OrderStatus.FILA, LocalDateTime.now(), items);
       return persisted;
 

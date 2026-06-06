@@ -11,7 +11,6 @@ public final class Customer {
     this.email = email;
   }
 
-  // usado ao cadastrar antes do insert
   public Customer(String name, String email) {
     this(0, name, email);
   }

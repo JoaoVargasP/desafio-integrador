@@ -17,7 +17,6 @@ public class CustomerDAOImpl implements CustomerDAO {
       ps.setString(1, customer.getName());
       ps.setString(2, customer.getEmail());
       ps.executeUpdate();
-      // geração de id pode ser usada se necessário
     }
   }
 

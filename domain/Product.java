@@ -17,7 +17,6 @@ public final class Product {
     this.category = category;
   }
 
-  // usado ao cadastrar antes do insert
   public Product(String name, BigDecimal price, int stock, ProductCategory category) {
     this(0, name, price, stock, category);
   }
