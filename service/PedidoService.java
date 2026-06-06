@@ -4,10 +4,12 @@ import dao.CustomerDAO;
 import dao.OrderDAO;
 import dao.ProductDAO;
 import domain.*;
+import util.DBUtil;
+import java.math.BigDecimal;
+import java.sql.*;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-
-import java.sql.SQLException;
 
 public class PedidoService {
   private final ProductDAO productDAO;
@@ -20,28 +22,70 @@ public class PedidoService {
     this.orderDAO = orderDAO;
   }
 
-  // Criação de pedido com validação de estoque (sem atualização de estoque neste commit)
+  // Criação de pedido com transação única: estoque + persistência
   public Order createOrder(int customerId, List<OrderItem> items) throws SQLException {
     Optional<Customer> cOpt = customerDAO.findById(customerId);
     if (!cOpt.isPresent()) {
       throw new IllegalArgumentException("Cliente não encontrado");
     }
-    // Validação simples de estoque
-    for (OrderItem item : items) {
-      int productId = item.getProduct().getId();
-      Optional<Product> pOpt = productDAO.findById(productId);
-      if (!pOpt.isPresent()) {
-        throw new IllegalArgumentException("Produto não encontrado: " + productId);
-      }
-      Product p = pOpt.get();
-      if (p.getStock() < item.getQuantity()) {
-        throw new InsufficientStockException("Estoque insuficiente para: " + p.getName());
-      }
-    }
-
     Customer customer = cOpt.get();
-    Order newOrder = new Order(customer, items); // status inicial ABERTO
-    orderDAO.create(newOrder);
-    return newOrder;
+
+    // Início da transação própria da camada de serviço
+    String sqlInsertOrder = "INSERT INTO orders (customer_id, status, created_at) VALUES (?, ?, ?)";
+    String sqlInsertItem = "INSERT INTO order_items (order_id, product_id, quantity, price_at_order) VALUES (?, ?, ?, ?)";
+    String sqlStock = "UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?";
+
+    try (Connection conn = DBUtil.getConnection()) {
+      conn.setAutoCommit(false);
+      int orderId;
+
+      // 1) inserir pedido
+      try (PreparedStatement psOrder = conn.prepareStatement(sqlInsertOrder, Statement.RETURN_GENERATED_KEYS)) {
+        psOrder.setInt(1, customer.getId());
+        psOrder.setString(2, OrderStatus.FILA.name()); // salvo com FILA para processamento
+        psOrder.setTimestamp(3, Timestamp.valueOf(LocalDateTime.now()));
+        psOrder.executeUpdate();
+        try (ResultSet rs = psOrder.getGeneratedKeys()) {
+          if (rs.next()) orderId = rs.getInt(1);
+          else throw new SQLException("Falha ao obter id do pedido");
+        }
+      }
+
+      // 2) atualizar estoque (condicional) e 3) inserir itens
+      try (PreparedStatement psStock = conn.prepareStatement(sqlStock);
+           PreparedStatement psItem = conn.prepareStatement(sqlInsertItem)) {
+        for (OrderItem item : items) {
+          int productId = item.getProduct().getId();
+          int qty = item.getQuantity();
+
+          // estoque reservado
+          psStock.setInt(1, qty);
+          psStock.setInt(2, productId);
+          psStock.setInt(3, qty);
+          int updated = psStock.executeUpdate();
+          if (updated == 0) {
+            conn.rollback();
+            throw new InsufficientStockException("Estoque insuficiente para: " + item.getProduct().getName());
+          }
+
+          // itens do pedido
+          psItem.setInt(1, orderId);
+          psItem.setInt(2, productId);
+          psItem.setInt(3, qty);
+          psItem.setBigDecimal(4, item.getPriceAtOrder());
+          psItem.addBatch();
+        }
+        psItem.executeBatch();
+      }
+
+      conn.commit();
+
+      // Montar objeto de retorno (id gerado, status FILA)
+      Order persisted = new Order(orderId, customer, OrderStatus.FILA, LocalDateTime.now(), items);
+      return persisted;
+
+    } catch (SQLException ex) {
+      throw ex;
+    }
   }
 }
